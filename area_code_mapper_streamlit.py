@@ -161,10 +161,16 @@ def load_custom_mapping(uploaded_file):
     return dict(zip(mapping_df["area_code"], mapping_df["state"]))
 
 
-def process_uploaded_csv(uploaded_file, area_code_map, remove_duplicates):
-    df = pd.read_csv(uploaded_file, dtype=str, keep_default_na=False)
+def process_uploaded_file(uploaded_file, area_code_map, remove_duplicates):
+    extension = os.path.splitext(uploaded_file.name)[1].lower()
+    if extension == ".csv":
+        df = pd.read_csv(uploaded_file, dtype=str, keep_default_na=False)
+    elif extension == ".xlsx":
+        df = pd.read_excel(uploaded_file, dtype=str, keep_default_na=False)
+    else:
+        raise ValueError("Unsupported file type. Please upload a CSV or XLSX file.")
     if df.empty or len(df.columns) == 0:
-        raise ValueError("The CSV is empty or has no columns.")
+        raise ValueError("The file is empty or has no columns.")
 
     first_col = df.columns[0]
     # Clean common formatting characters while retaining the source columns.
@@ -188,9 +194,9 @@ def make_csv_bytes(df):
 
 
 st.title("📞 Area Code Mapper & Duplicate Remover")
-st.caption("Upload one or more CSVs, map phone numbers to states and time zones, remove duplicates, and download the processed files.")
+st.caption("Upload one or more CSV or XLSX files, map phone numbers to states and time zones, remove duplicates, and download the processed files.")
 st.info(
-    "Privacy: this app does not write uploaded CSVs or results to disk, a database, or the GitHub repository. "
+    "Privacy: this app does not write uploaded files or results to disk, a database, or the GitHub repository. "
     "Files/results are handled in the active app session's memory. If this app is hosted on Streamlit Community Cloud, "
     "uploads are still transmitted to and processed by Streamlit's servers; use the local version for files that must never leave your computer."
 )
@@ -210,9 +216,9 @@ if "upload_widget_version" not in st.session_state:
     st.session_state["upload_widget_version"] = 0
 
 input_files = st.file_uploader(
-    "Select input CSV file(s)", type=["csv"], accept_multiple_files=True,
+    "Select input CSV or XLSX file(s)", type=["csv", "xlsx"], accept_multiple_files=True,
     key=f"input_files_{st.session_state['upload_widget_version']}",
-    help="Phone numbers must be in the first column. Other source columns are retained. Files are not written to disk by this app." 
+    help="Phone numbers must be in the first column. Other source columns are retained. Files are not written to disk by this app."
 )
 
 if filter_mode == "State":
@@ -226,7 +232,7 @@ selected_filters = st.multiselect(filter_label, filter_options, help="Leave empt
 if not use_internal_mapping and custom_mapping_file is None:
     st.warning("Upload a custom mapping CSV or enable the built-in mapping before processing.")
 
-if st.button("🚀 Process CSV Files", type="primary", disabled=not input_files or (not use_internal_mapping and custom_mapping_file is None)):
+if st.button("🚀 Process Files", type="primary", disabled=not input_files or (not use_internal_mapping and custom_mapping_file is None)):
     try:
         area_code_map = INTERNAL_AREA_CODE_MAP.copy() if use_internal_mapping else load_custom_mapping(custom_mapping_file)
         generated_files = {}
@@ -237,9 +243,9 @@ if st.button("🚀 Process CSV Files", type="primary", disabled=not input_files 
         for uploaded in input_files:
             try:
                 uploaded.seek(0)
-                df, duplicates_removed = process_uploaded_csv(uploaded, area_code_map, remove_duplicates)
+                df, duplicates_removed = process_uploaded_file(uploaded, area_code_map, remove_duplicates)
                 # Prevent same-named uploads from silently overwriting each other.
-                base_name = os.path.basename(uploaded.name)
+                base_name = f"{os.path.splitext(os.path.basename(uploaded.name))[0]}.csv"
                 if base_name in generated_files:
                     stem, ext = os.path.splitext(base_name)
                     base_name = f"{stem}_{len(generated_files) + 1}{ext}"
